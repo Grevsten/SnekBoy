@@ -1,12 +1,5 @@
-import Cart
-
-string = "pong"
-
-match string:
-    case "ping":
-        print("hello")
-    case "pong":
-        print("olleh")
+import cart
+import cpu
 
 class Bus():
     

@@ -1,7 +1,7 @@
 import sys
 import struct
 
-ROM = open('ROMS/tetris.gb', "rb")
+ROM = open('ROMS/example.gb', "rb")
 
 Licensee_Codes = {
 	    0x00 : "None",

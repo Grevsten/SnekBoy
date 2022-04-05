@@ -26,4 +26,4 @@ class LR35902():
 test = LR35902()
 
 
-print(hex(test.getreg("Q")))
+print(hex(test.getreg("AF")))
