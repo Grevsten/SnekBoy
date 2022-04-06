@@ -3,17 +3,21 @@ import cpu
 
 class Bus():
     
-    def __init__(self, ram = [None]*0xFFFF):
+    def __init__(self, ram = [0x0]*0xFFFF):
         self.ram = ram
     
     def write(self, addr, data):
-        if (addr < 0x8000):
+        "Writes to address in RAM"
+        if addr <= 0xFFFF:
             self.ram[addr] = data
 
     def read(self, addr) -> int:
-        if (addr < 0x8000):
+        "Returns value at address in RAM"
+        if addr <= 0xFFFF:
             return self.ram[addr]
 
-test = Bus()
+testbus = Bus()
 
-testcart = Cart.Cartridge()
+testcart = cart.Cartridge()
+
+testcpu = cpu.LR35902(testbus)
