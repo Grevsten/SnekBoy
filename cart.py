@@ -1,7 +1,7 @@
 import sys
 import struct
 
-ROM = open('ROMS/tetris.gb', "rb")
+ROM = open('ROMS/example.gb', "rb")
 
 Licensee_Codes = {
 	    0x00 : "None",
@@ -75,7 +75,6 @@ class Cartridge():
         self.size = len(data) #bytes
         self.header = 0x0100
 
-    def get_Metadata(self): # Not finished
-		"returns the metadata of the ROM"
-        #return self.data[0x0104:0x0134].hex()
-        return self.data[0x014B:0x014C].hex()
+    def get_Metadata(self): #To be implemented
+		"Returns the metadata of the ROM."
+		return self.data[0x014B:0x014C].hex()

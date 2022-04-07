@@ -7,12 +7,12 @@ class Bus():
         self.ram = ram
     
     def write(self, addr, data):
-        "Writes to address in RAM"
+        "Writes to address in RAM."
         if addr <= 0xFFFF:
             self.ram[addr] = data
 
     def read(self, addr) -> int:
-        "Returns value at address in RAM"
+        "Returns value at address in RAM."
         if addr <= 0xFFFF:
             return self.ram[addr]
 
