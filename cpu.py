@@ -63,6 +63,12 @@ class LR35902():
             if not self.cycle:
                 self.setreg("PC", self.getreg("PC") + 1)
 
+
+    """
+    Below are the mathematical commands for the LR35902 CPU.
+    """
+
+
     def LD(self, a, b, inc = 0, c = "None"): #To be implemented
             "Sets memory in a to memory in b and increments one of them depending on the argument."
             pass
@@ -72,6 +78,8 @@ class LR35902():
                 c += inc
             """
 
+
+
     def LDH(self, n, ord = 1):
         "Adds value at location 0xFF00 + a in memory to registry entry A or the reverse operation depending on the argument."
         if ord:
@@ -79,23 +87,86 @@ class LR35902():
         else:
             self.setreg("A", self.bus.read(0xFF00 + n))
 
+
+
     def ADD(self, n):
         "Adds the value n to registry entry A."
-        self.setreg(self.getreg("A") + n)
+        A = self.getreg("A")
+        result = A + n
+        self.setreg("A", result)
+
+        #Setting flags
+        if result == 0:
+            self.setreg("Z", 1)
+        self.setreg("N", 0)
+        if (n ^ A ^ result) & 0x10:
+            self.setreg("H", 1)
+        if (n ^ A ^ result) & 0x100:
+            self.setreg("C", 1)
+
+    
+
+    def ADDC(self, n):
+        "Adds the value n to registry entry A."
+        A = self.getreg("A")
+        C = self.getreg("C")
+        result = A + n + C
+        self.setreg("A", result)
+
+        #Setting flags
+        if result == 0:
+            self.setreg("Z", 1)
+        self.setreg("N", 0)
+        if (n ^ A ^ result) & 0x10:
+            self.setreg("H", 1)
+        if (n ^ A ^ result) & 0x100:
+            self.setreg("C", 1)
+
 
 
     def AND(self, n):
         "Logical bitwise and with registry entry A and n, result stored in A"
-        self.setreg("A", n & self.getreg("A"))
+        result = n & self.getreg("A")
+        self.setreg("A", result)
+
+        #Setting flags
+        if result == 0:
+            self.setreg("Z", 1)
+        self.setreg("N", 0)
+        self.setreg("H", 1)
+        self.setreg("C", 0)
+
+
 
     def OR(self, n):
         "Logical bitwise or with registry entry A and n, result stored in A"
-        self.setreg("A", n | self.getreg("A"))
+        result = n | self.getreg("A")
+        self.setreg("A", result)
+
+        #Setting flags
+        if result == 0:
+            self.setreg("Z", 1)
+        self.setreg("N", 0)
+        self.setreg("H", 0)
+        self.setreg("C", 0)
+
+
 
     def XOR(self, n):
         "Logical bitwise xor with registry entry A and n, result stored in A"
-        self.setreg("A", n ^ self.getreg("A"))
+        result = n ^ self.getreg("A")
+        self.setreg("A", result)
+        
+        #Setting flags
+        if result == 0:
+            self.setreg("Z", 1)
+        self.setreg("N", 0)
+        self.setreg("H", 0)
+        self.setreg("C", 0)
+
+
 
     def CP(n):
         "Compares n to registry entry A by calculating A - n and returns the result"
         return self.getreg("A") - n
+        
