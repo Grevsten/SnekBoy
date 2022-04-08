@@ -1,13 +1,15 @@
 class LR35902():
 
     def __init__(self, bus):
-        "Initializing registers and connecting the CPU to the bus"
+        "Initializing registers and connecting the CPU to the bus."
         self.reg_low = {"C":"BC", "E":"DE", "L":"HL", "F":"AF"}
         self.reg_high = {"B":"BC", "D":"DE", "H":"HL", "A":"AF"}
-        self.reg = {"BC":0x0, "DE":0x0, "HL":0x0, "AF":0xAABB, "PC":0x0, "SP": 0x0}
-        self.flags = {"Z" : 0x7, "N" : 0x6, "H" : 0x5, "C" : 0x4}
+        self.reg = {"BC":0x0, "DE":0x0, "HL":0x0, "AF":0xFEFF, "PC":0x0, "SP": 0x0}
+        self.flags = {"z" : 7, "n" : 6, "h" : 5, "c" : 4}
         self.bus = bus
         self.cycle = 0
+
+    
 
     def getreg(self, entry):
         "Fetching registry entries."
@@ -28,30 +30,37 @@ class LR35902():
 
     def setreg(self, entry, value):
         "Setting registry entries."
+
         if entry in self.reg_high:
-            if value > 0xFF:
-                raise ValueError(f"Value out of range: {hex(value)} ({bin(value)}) > 0xFF")
-            self.reg[self.reg_high[entry]] = self.reg[self.reg_high[entry]] & 0xFF | (value << 0x8)
+            value %= 0x100
+            self.reg[self.reg_high[entry]] = (self.reg[self.reg_high[entry]] & 0xFF | (value << 0x8))
+            
 
         elif entry in self.reg_low:
-            if value > 0xFF:
-                raise ValueError(f"Value out of range: {hex(value)} ({bin(value)}) > 0xFF")
-            self.reg[self.reg_low[entry]] = (self.reg[self.reg_low[entry]] >> 0x8) << 0x8 | value
-
-        elif entry in self.flags:
-            if value > 0x1:
-                raise ValueError(f"Value out of range: {hex(value)} ({bin(value)}) > 0x1")
-            f = self.getreg("F")
-            flag = self.flags[entry]
-            self.setreg("F", (f & ~(0x1 << flag)) | ((value << flag) & (0x1 << flag)))
+            value %= 0x100
+            self.reg[self.reg_low[entry]] = ((self.reg[self.reg_low[entry]] >> 0x8) << 0x8 | value)
 
         else:
             if entry in self.reg:
-                if value > 0xFFFF:
-                    raise ValueError(f"Value out of range: {hex(value)} ({bin(value)}) > 0xFFFF")
-                self.reg[entry] = value
+                self.reg[entry] = value % 0x10000
             else:
                 raise KeyError(f"Invalid register key: {entry}")
+    
+    def setFlags(self, z, n, h, c):
+        args = [z, n, h, c]
+        argnum = 0
+        for flag in self.flags:
+            if args[argnum] == None:
+                argnum += 1
+                continue
+            value = int(args[argnum])
+            if value > 0x1:
+                raise ValueError(f"Value must be 0 or 1: {hex(value)} ({bin(value)}) > 0x1")
+            f = self.getreg("F")
+            flagbit = self.flags[flag]
+            self.setreg("F", (f & ~(0x1 << flagbit)) | ((value << flagbit) & (0x1 << flagbit)))
+            argnum += 1
+
     
     def fetch(self, addr):
         "Returns data at specified address in RAM."
@@ -60,7 +69,7 @@ class LR35902():
     def clock(self): #To be implemented
         "Updates the state of the CPU every clock-tick."
         while(True):
-            if not self.cycle:
+            if self.cycle == 0:
                 self.setreg("PC", self.getreg("PC") + 1)
 
 
@@ -70,13 +79,8 @@ class LR35902():
 
 
     def LD(self, a, b, inc = 0, c = "None"): #To be implemented
-            "Sets memory in a to memory in b and increments one of them depending on the argument."
-            pass
-            """
-            a = b
-            if inc:
-                c += inc
-            """
+        "Sets memory in a to memory in b and increments one of them depending on the argument."
+        pass
 
 
 
@@ -94,15 +98,7 @@ class LR35902():
         A = self.getreg("A")
         result = A + n
         self.setreg("A", result)
-
-        #Setting flags
-        if result == 0:
-            self.setreg("Z", 1)
-        self.setreg("N", 0)
-        if (n ^ A ^ result) & 0x10:
-            self.setreg("H", 1)
-        if (n ^ A ^ result) & 0x100:
-            self.setreg("C", 1)
+        self.setFlags(result == 0, 0, (n ^ A ^ result) & 0x10, (n ^ A ^ result) & 0x1000)
 
     
 
@@ -112,15 +108,7 @@ class LR35902():
         C = self.getreg("C")
         result = A + n + C
         self.setreg("A", result)
-
-        #Setting flags
-        if result == 0:
-            self.setreg("Z", 1)
-        self.setreg("N", 0)
-        if (n ^ A ^ result) & 0x10:
-            self.setreg("H", 1)
-        if (n ^ A ^ result) & 0x100:
-            self.setreg("C", 1)
+        self.setFlags(result == 0, 0, (n ^ A ^ result) & 0x10, (n ^ A ^ result) & 0x1000)
 
 
 
@@ -128,13 +116,7 @@ class LR35902():
         "Logical bitwise and with registry entry A and n, result stored in A"
         result = n & self.getreg("A")
         self.setreg("A", result)
-
-        #Setting flags
-        if result == 0:
-            self.setreg("Z", 1)
-        self.setreg("N", 0)
-        self.setreg("H", 1)
-        self.setreg("C", 0)
+        self.setFlags(result == 0, 0, 1, 0)
 
 
 
@@ -142,13 +124,7 @@ class LR35902():
         "Logical bitwise or with registry entry A and n, result stored in A"
         result = n | self.getreg("A")
         self.setreg("A", result)
-
-        #Setting flags
-        if result == 0:
-            self.setreg("Z", 1)
-        self.setreg("N", 0)
-        self.setreg("H", 0)
-        self.setreg("C", 0)
+        self.setFlags(result == 0, 0, 0, 0)
 
 
 
@@ -156,17 +132,32 @@ class LR35902():
         "Logical bitwise xor with registry entry A and n, result stored in A"
         result = n ^ self.getreg("A")
         self.setreg("A", result)
-        
-        #Setting flags
-        if result == 0:
-            self.setreg("Z", 1)
-        self.setreg("N", 0)
-        self.setreg("H", 0)
-        self.setreg("C", 0)
+        self.setFlags(result == 0, 0, 0, 0)
+    
+
+
+    def CP(self, n):
+        "Compares n to registry entry A by calculating A - n and sets the flags according to the result."
+        "Does not return anything."
+        A = self.getreg("A")
+        result = A - n
+        self.setFlags(result == 0, 1, (A & 0xF) < (n & 0xF), result < 0)
 
 
 
-    def CP(n):
-        "Compares n to registry entry A by calculating A - n and returns the result"
-        return self.getreg("A") - n
-        
+    def INC(self, n):
+        "Increments registry n and sets the flags accordingly."
+        N = getreg(n)
+        result = getreg(n) + 1
+        self.setreg(result)
+        if n in self.reg_low or self.reg_high:
+            self.setFlags(result == 0, 0, (N ^ 0x1 ^ result) & 0x10, None)
+
+    
+    def DEC(self, n):
+        "Increments registry n and sets the flags accordingly."
+        N = getreg(n)
+        result = getreg(n) - 1
+        self.setreg(result)
+        if n in self.reg_low or self.reg_high:
+            self.setFlags(result == 0, 0, (N & 0xF) < (1 & 0xF), None)

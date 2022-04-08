@@ -70,11 +70,12 @@ Licensee_Codes = {
 
 class Cartridge():
 
-    def __init__(self, data = ROM.read()):
-        self.data = data
-        self.size = len(data) #bytes
-        self.header = 0x0100
+	def __init__(self, data = ROM.read()):
+		self.data = data
+		self.size = len(data) #bytes
+		self.header = 0x0100
 
-    def get_Metadata(self): #To be implemented
+	def get_Metadata(self): #To be implemented
 		"Returns the metadata of the ROM."
 		return self.data[0x014B:0x014C].hex()
+		
