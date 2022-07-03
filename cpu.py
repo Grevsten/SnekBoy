@@ -5,7 +5,7 @@ class LR35902():
 
         self.reg_high = {"B":"BC", "D":"DE", "H":"HL", "A":"AF"}
         self.reg_low = {"C":"BC", "E":"DE", "L":"HL", "F":"AF"}
-        self.reg = {"BC":0x0, "DE":0x0, "HL":0x0, "AF":0x0, "PC":0x0, "SP": 0x0}
+        self.reg = {"BC":0x0000, "DE":0x0000, "HL":0x0000, "AF":0x0000, "PC":0x0000, "SP": 0x0000}
         self.flags = {"z" : 7, "n" : 6, "h" : 5, "c" : 4}
         self.bus = bus
         self.cycle = 0
@@ -70,6 +70,31 @@ class LR35902():
     def fetch(self, addr):
         "Returns data at specified address in RAM."
         return self.bus.read(addr)
+    
+
+
+    def getbyteatpc(self):
+        PC = self.getreg("PC")
+        self.setreg("PC", self.getreg("PC") + 1)
+        value = self.bus.read(PC)
+        return value
+
+
+
+    def getwordatpc(self):
+        low = self.getbyteatpc()
+        high = self.getbyteatpc()
+        value =  low | high << 8
+        return value
+    
+
+
+    def getsignedbyteatpc(self):
+        s8 = self.getbyteatpc
+        if s8 >> 7:
+            return -(s8 | 0x7F)
+        else:
+            return s8 | 0x7F
 
 
 
@@ -80,43 +105,56 @@ class LR35902():
                 self.setreg("PC", self.getreg("PC") + 1)
     
 
+    """Below are the opcodes for the LR35902 processor."""
 
-    def LD(self, a, b, inc = 0, c = "None"):
-        "Sets memory in a to memory in b and increments one of them depending on the argument."
-        args = (a,b)
+    def LD(self, A, B):
+        "Sets memory in A to value B."
+
+        if B in self.reg_high or B in self.reg_low or B in self.reg:
+            B = self.getreg(B)
         
-        match args:
-            case 
+        if A in self.reg_high or A in self.reg_low or A in self.reg:
+            self.setreg(A, B)
+        else:
+            self.bus.write(A, B)
+    
 
+
+    def LDI(self, A, B):
+        "Sets memory in A to value B and increments HL."
+        self.LD(A, B)
+        HL = self.getreg("HL")
+        self.setreg(HL, HL + 1)
+    
+
+
+    def LDD(self, A, B):
+        "Sets memory in A to value B and decrements HL."
+        self.LD(A, B)
+        HL = self.getreg("HL")
+        self.setreg(HL, HL - 1)
 
 
     def LDH(self, n, ord = 1):
-        "Adds value at location 0xFF00 + n in memory to registry entry A or the reverse operation depending on the argument."
+        "Adds value at location 0xFF00 + n in memory to the accumulator or the reverse operation depending on the argument."
         if ord:
             self.bus.write(0xFF00 + n, self.getreg("A"))
         else:
             self.setreg("A", self.bus.read(0xFF00 + n))
 
-
-
-    """
-    Below are the mathematical commands for the LR35902 CPU.
-    """
-
     
-
     def ADC(self, n):
-        "Adds the integer n plus the carry bit C to registry entry A."
+        "Adds the integer n plus the carry bit to the accumulator."
         A = self.getreg("A")
-        C = self.getreg("C")
-        result = A + n + C
+        c = self.getreg("c")
+        result = A + n + c
         self.setreg("A", result)
-        self.setflags(result == 0, 0, ((A & 0xF) + (n & 0xF) + C) > 0xF, result > 0xFF)
+        self.setflags(result == 0, 0, ((A & 0xF) + (n & 0xF) + c) > 0xF, result > 0xFF)
 
 
 
     def SUB(self, n):
-        "Subtracts the integer n from registry entry A."
+        "Subtracts the integer n from the accumulator."
         A = self.getreg("A")
         result = A - n
         self.setreg("A", result)
@@ -125,17 +163,17 @@ class LR35902():
 
 
     def SBC(self, n):
-        "Subtracts the integer n and the carry bit C from registry entry A."
+        "Subtracts the integer n and the carry bit C from the accumulator."
         A = self.getreg("A")
-        C = self.getreg("C")
-        result = A - (n + C)
+        c = self.getreg("c")
+        result = A - (n + c)
         self.setreg("A", result)
         self.setflags(result == 0, 1,  (A & 0xF) < (n & 0xF), result < 0)
 
 
 
     def AND(self, n):
-        "Logical bitwise and with registry entry A and integer n, result stored in A"
+        "Logical bitwise and with the accumulator and integer n, result stored in the accumulator."
         result = n & self.getreg("A")
         self.setreg("A", result)
         self.setflags(result == 0, 0, 1, 0)
@@ -143,7 +181,7 @@ class LR35902():
 
 
     def OR(self, n):
-        "Logical bitwise or with registry entry A and integer n, result stored in A"
+        "Logical bitwise or with the accumulator and integer n, result stored in the accumulator."
         result = n | self.getreg("A")
         self.setreg("A", result)
         self.setflags(result == 0, 0, 0, 0)
@@ -151,7 +189,7 @@ class LR35902():
 
 
     def XOR(self, n):
-        "Logical bitwise xor with registry entry A and integer n, result stored in A"
+        "Logical bitwise xor with the accumulator and integer n, result stored in the accumulator"
         result = n ^ self.getreg("A")
         self.setreg("A", result)
         self.setflags(result == 0, 0, 0, 0)
@@ -159,7 +197,7 @@ class LR35902():
 
 
     def CP(self, n):
-        "Compares integer n to registry entry A by calculating A - n and sets the flags according to the result."
+        "Compares integer n to the accumulator by calculating A - n and sets the flags according to the result."
         A = self.getreg("A")
         result = A - n
         self.setflags(result == 0, 1, (A & 0xF) < (n & 0xF), result < 0)
@@ -168,21 +206,31 @@ class LR35902():
 
     def INC(self, r):
         "Increments registry r and sets the flags accordingly."
-        R = self.getreg(r)
-        result = R + 1
-        self.setreg(result)
-        if r in self.reg_low or self.reg_high:
-            self.setflags(result == 0, 0, (result & 0xF) == 0x00, None)
+        if r in self.reg or r in self.reg_low or r in self.reg_high:
+            R = self.getreg(r)
+            result = R + 1
+            self.setreg(r, result)
+            if r in self.reg_low or self.reg_high:
+                self.setflags(result == 0, 0, (result & 0xF) == 0x00, None)
+        else:
+            R = self.bus.read(r)
+            result = R + 1
+            self.bus.write(r, result)
 
 
     
     def DEC(self, r):
         "Increments registry r and sets the flags accordingly."
-        R = self.getreg(r)
-        result = R - 1
-        self.setreg(r, result)
-        if r in self.reg_low or self.reg_high:
-            self.setflags(result == 0, 1, (R & 0xF) < (1 & 0xF), None)
+        if r in self.reg or r in self.reg_low or r in self.reg_high:
+            R = self.getreg(r)
+            result = R - 1
+            self.setreg(r, result)
+            if r in self.reg_low or self.reg_high:
+                self.setflags(result == 0, 1, (R & 0xF) < (1 & 0xF), None)
+        else:
+            R = self.bus.read(r)
+            result = R - 1
+            self.bus.write(r, result)
 
 
 
@@ -212,7 +260,7 @@ class LR35902():
 
 
     def DAA(self):
-        "Decimal adjusts register A."
+        "Decimal adjusts the accumulator."
         A = self.getreg("A")
         n = self.getreg("n")
         h = self.getreg("h")
@@ -235,7 +283,7 @@ class LR35902():
     
 
     def CPL(self):
-        "Sets register entry A to its complement."
+        "Sets the accumulator to its complement."
         A = self.getreg("A")
         result = A ^ 0xFF
         self.setreg("A", result)
@@ -244,26 +292,854 @@ class LR35902():
 
 
     def CCF(self):
-        "Sets register flag C to its complement."
-        C = self.getreg("c")
-        result = C ^ 0x1
+        "Sets the carry flag to its complement."
+        c = self.getreg("c")
+        result = c ^ 0x1
         self.setflags(None, 0, 0, result)
 
 
 
     def SCF(self):
-        "Sets the carry flag C"
+        "Sets the carry flag."
         self.setflags(None, 0, 0, 1)
+    
+
+
+    def NOP(self):
+        "Performs no operation."
+        pass
+    
+
+
+    def HALT(self):
+        "Powers down CPU until an interrupt is triggered."
+        pass
+
+
+    def STOP(self):
+        "Halts the CPU and screen until a button is pressed."
+        pass
+
+
+
+    def RLCA(self):
+        "Rotates the accumulator one step to the left and sets the carry flag to old bit 7."
+        A = self.getreg("A")
+        result = ((A << 1)|(A >> 7)) & 0xFF
+        self.setreg("A", result)
+        self.setflags(None, None, None, A >> 0x7 & 0x1)
+    
+
+
+    def RLA(self):
+        "Rotates the accumulator one step to the left through the carry flag."
+        A = self.getreg("A")
+        c = self.getreg("c")
+        cA = (c << 8) | A
+        result = ((cA << 1)|(cA >> 8)) & 0x1FF
+        self.setreg("A", result | 0xFF)
+        self.setflags(result | 0xFF == 0, None, None, result >> 0x8 & 0x1)
 
     
 
-    def readopcode(opcode):
-        match opcode:
+    def RRCA(self):
+        "Rotates the accumulator one step to the right and sets carry flag to old bit 0."
+        A = self.getreg("A")
+        result = (A >> 1)|((A << 7) & 0xFF)
+        self.setreg("A", result)
+        self.setflags(None, None, None, A & 0x1)
+    
+
+
+
+    def RRA(self):
+        "Rotates the accumulator one step to the right through the carry flag."
+        A = self.getreg("A")
+        c = self.getreg("c")
+        Ac = (A << 1) | c
+        result = (Ac >> 1)|((Ac << 8) & 0x1FF)
+        self.setreg("A", result  >> 1)
+        self.setflags(result | 0xFF == 0, None, None, result & 0x1)
+    
+
+
+    def JR(self, s8, cond = 1):
+        "Adds s8 to the current address in the programme counter."
+        if cond:
+            PC = self.getreg("PC")
+            result = s8 + PC
+            self.setreg("PC", result)        
+
+    
+
+    def readopcode(self,byte):
+
+        match byte:
 
             case 0x00:
-                NOP()
+                self.NOP()
                 self.cycle = 4
 
             case 0x01:
-                LD("BC", )
+                self.LD("BC", self.getwordatpc())
+                self.cycle = 12
+
+            case 0x02:
+                self.LD(self.getreg("BC"), "A")
+                self.cycle = 8
+            
+            case 0x03:
+                self.INC("BC")
+                self.cycle = 8
+
+            case 0x04:
+                self.INC("B")
+                self.cycle = 4
+
+            case 0x05:
+                self.DEC("B")
+                self.cycle = 4
+
+            case 0x06:
+                self.LD(self.getbyteatpc(), "B")
+                self.cycle = 8
+
+            case 0x07:
+                self.RLCA()
+                self.cycle = 4
+            
+            case 0x08:
+                self.LD(self.getwordatpc(), self.getreg("SP"))
+                self.cycle = 20
+
+            case 0x09:
+                self.ADD("HL", "BC")
+                self.cycle = 8
+
+            case 0x0A:
+                self.LD("A", self.bus.read(self.getreg("BC")))
+                self.cycle = 8
+
+            case 0x0B:
+                self.DEC("BC")
+                self.cycle = 8
+            
+            case 0x0C:
+                self.INC("C")
+                self.cycle = 4
+            
+            case 0x0D:
+                self.DEC("C")
+                self.cycle = 4
+            
+            case 0x0E:
+                self.LD(self.getbyteatpc(), "C")
+                self.cycle = 8
+            
+            case 0x0F:
+                self.RRCA()
+                self.cycle = 4
+            
+            case 0x10:
+                self.STOP()
+                self.cycle = 4
+            
+            case 0x11:
+                self.LD("DE", self.getwordatpc())
+                self.cycle = 12
+            
+            case 0x12:
+                self.LD(self.getreg("DE"), "A")
+                self.cycle = 8
+            
+            case 0x13:
+                self.INC("DE")
+                self.cycle = 8
+            
+            case 0x14:
+                self.INC("D")
+                self.cycle = 4
+
+            case 0x15:
+                self.DEC("D")
+                self.cycle = 4
+            
+            case 0x16:
+                self.LD(self.getbyteatpc(), "D")
+                self.cycle = 8
+
+            case 0x17:
+                self.RLA()
+                self.cycle = 4
+            
+            case 0x18:
+                self.JR(self.getsignedbyteatpc())
+                self.cycle = 12
+            
+            case 0x19:
+                self.ADD("HL", "DE")
+                self.cycle = 8
+
+            case 0x1A:
+                self.LD("A", self.bus.read(self.getreg("DE")))
+                self.cycle = 8
+            
+            case 0x1B:
+                self.DEC("DE")
+                self.cycle = 8
+            
+            case 0x1C:
+                self.INC("E")
+                self.cycle = 4
+            
+            case 0x1D:
+                self.DEC("E")
+                self.cycle = 4
+            
+            case 0x1E:
+                self.LD(self.getbyteatpc(), "E")
+                self.cycle = 8
+            
+            case 0x1F:
+                self.RRA()
+                self.cycle = 4
+            
+            case 0x20:
+                self.JR(self.getsignedbyteatpc(), not self.getreg("z"))
+                self.cycle = 8
+            
+            case 0x21:
+                self.LD("DE", self.getwordatpc())
+                self.cycle = 12
+            
+            case 0x22:
+                self.LDI(self.getreg("HL"), "A")
+                self.cycle = 8
+            
+            case 0x23:
+                self.INC("HL")
+                self.cycle = 8
+            
+            case 0x24:
+                self.INC("H")
+                self.cycle = 4
+            
+            case 0x25:
+                self.DEC("H")
+                self.cycle = 4
+            
+            case 0x26:
+                self.LD(self.getbyteatpc(), "H")
+                self.cycle = 8
+            
+            case 0x27:
+                self.DAA()
+                self.cycle = 4
+            
+            case 0x28:
+                self.JR(self.getsignedbyteatpc(), self.getreg("z"))
+                self.cycle = 12
+            
+            case 0x29:
+                self.ADD("HL", "HL")
+                self.cycle = 8
+            
+            case 0x2A:
+                self.LDI("A", self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0x2B:
+                self.DEC("HL")
+                self.cycle = 8
+            
+            case 0x2C:
+                self.INC("L")
+                self.cycle = 4
+            
+            case 0x2D:
+                self.DEC("L")
+                self.cycle = 4
+            
+            case 0x2E:
+                self.LD(self.getbyteatpc(), "L")
+                self.cycle = 8
+            
+            case 0x2F:
+                self.CPL()
+                self.cycle = 4
+            
+            case 0x30:
+                self.JR(self.getsignedbyteatpc(), not self.getreg("c"))
+                self.cycle = 12
+            
+            case 0x31:
+                self.LD("SP", self.getwordatpc())
+                self.cycle = 12
+            
+            case 0x32:
+                self.LDD(self.getreg("HL"), "A")
+                self.cycle = 8
+            
+            case 0x33:
+                self.INC("SP")
+                self.cycle = 8
+            
+            case 0x34:
+                self.INC(self.getreg("HL"))
+                self.cycle = 12
+            
+            case 0x35:
+                self.DEC(self.getreg("HL"))
+                self.cycle = 12
+            
+            case 0x36:
+                self.LD(self.getbyteatpc(), self.bus.read(self.getreg("HL")))
+                self.cycle = 12
+            
+            case 0x37:
+                self.SCF()
+                self.cycle = 4
+            
+            case 0x38:
+                self.JR(self.getsignedbyteatpc(), self.getreg("c"))
+                self.cycle = 12
+            
+            case 0x39:
+                self.ADD("HL", "SP")
+                self.cycle = 8
+            
+            case 0x3A:
+                self.LDD("A", self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0x3B:
+                self.DEC("SP")
+                self.cycle = 8
+            
+            case 0x3C:
+                self.INC("A")
+                self.cycle = 4
+            
+            case 0x3D:
+                self.DEC("A")
+                self.cycle = 4
+            
+            case 0x3E:
+                self.LD(self.getbyteatpc(), "A")
+                self.cycle = 8
+            
+            case 0x3F:
+                self.CCF()
+                self.cycle = 4
+            
+            case 0x40:
+                self.LD("B", "B")
+                self.cycle = 4
+ 
+            case 0x41:
+                self.LD("B", "C")
+                self.cycle = 4
+            
+            case 0x42:
+                self.LD("B", "D")
+                self.cycle = 4
+            
+            case 0x43:
+                self.LD("B", "E")
+                self.cycle = 4
+            
+            case 0x44:
+                self.LD("B", "H")
+                self.cycle = 4
+            
+            case 0x45:
+                self.LD("B", "L")
+                self.cycle = 4
+            
+            case 0x46:
+                self.LD("B", self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0x47:
+                self.LD("B", "A")
+                self.cycle = 4
+            
+            case 0x48:
+                self.LD("C", "B")
+                self.cycle = 4
+            
+            case 0x49:
+                self.LD("C", "C")
+                self.cycle = 4
+            
+            case 0x4A:
+                self.LD("C", "D")
+                self.cycle = 4
+            
+            case 0x4B:
+                self.LD("C", "E")
+                self.cycle = 4
+            
+            case 0x4C:
+                self.LD("C", "H")
+                self.cycle = 4
+            
+            case 0x4D:
+                self.LD("C", "L")
+                self.cycle = 4
+            
+            case 0x4E:
+                self.LD("C", self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0x4F:
+                self.LD("C", "A")
+                self.cycle = 4
+            
+            case 0x50:
+                self.LD("D", "B")
+                self.cycle = 4
+            
+            case 0x51:
+                self.LD("D", "C")
+                self.cycle = 4
+            
+            case 0x52:
+                self.LD("D", "D")
+                self.cycle = 4
+            
+            case 0x53:
+                self.LD("D", "E")
+                self.cycle = 4
+            
+            case 0x54:
+                self.LD("D", "H")
+                self.cycle = 4
+            
+            case 0x55:
+                self.LD("D", "L")
+                self.cycle = 4
+            
+            case 0x56:
+                self.LD("D", self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0x57:
+                self.LD("D", "A")
+                self.cycle = 4
+            
+            case 0x58:
+                self.LD("E", "B")
+                self.cycle = 4
+            
+            case 0x59:
+                self.LD("E", "C")
+                self.cycle = 4
+            
+            case 0x5A:
+                self.LD("E", "D")
+                self.cycle = 4
+            
+            case 0x5B:
+                self.LD("E", "E")
+                self.cycle = 4
+            
+            case 0x5C:
+                self.LD("E", "H")
+                self.cycle = 4
+            
+            case 0x5D:
+                self.LD("E", "L")
+                self.cycle = 4
+            
+            case 0x5E:
+                self.LD("E", self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0x5F:
+                self.LD("E", "A")
+                self.cycle = 4
+            
+            case 0x60:
+                self.LD("H", "B")
+                self.cycle = 4
+            
+            case 0x61:
+                self.LD("H", "C")
+                self.cycle = 4
+            
+            case 0x62:
+                self.LD("H", "D")
+                self.cycle = 4
+            
+            case 0x63:
+                self.LD("H", "E")
+                self.cycle = 4
+            
+            case 0x64:
+                self.LD("H", "H")
+                self.cycle = 4
+            
+            case 0x65:
+                self.LD("H", "L")
+                self.cycle = 4
+            
+            case 0x66:
+                self.LD("H", self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0x67:
+                self.LD("H", "A")
+                self.cycle = 4
+            
+            case 0x68:
+                self.LD("L", "B")
+                self.cycle = 4
+            
+            case 0x69:
+                self.LD("L", "C")
+                self.cycle = 4
+            
+            case 0x6A:
+                self.LD("L", "D")
+                self.cycle = 4
+            
+            case 0x6B:
+                self.LD("L", "E")
+                self.cycle = 4
+            
+            case 0x6C:
+                self.LD("L", "H")
+                self.cycle = 4
+            
+            case 0x6D:
+                self.LD("L", "L")
+                self.cycle = 4
+            
+            case 0x6E:
+                self.LD("L", self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0x6F:
+                self.LD("L", "A")
+                self.cycle = 4
+            
+            case 0x70:
+                self.LD(self.getreg("HL"), "B")
+                self.cycle = 8
+            
+            case 0x71:
+                self.LD(self.getreg("HL"), "C")
+                self.cycle = 8
+            
+            case 0x72:
+                self.LD(self.getreg("HL"), "D")
+                self.cycle = 8
+            
+            case 0x73:
+                self.LD(self.getreg("HL"), "E")
+                self.cycle = 8
+            
+            case 0x74:
+                self.LD(self.getreg("HL"), "H")
+                self.cycle = 8
+            
+            case 0x75:
+                self.LD(self.getreg("HL"), "L")
+                self.cycle = 8
+            
+            case 0x76:
+                self.LD(self.getreg("HL"), self.bus.read(self.getreg("HL")))
+                self.cycle = 4
+            
+            case 0x77:
+                self.LD(self.getreg("HL"), "A")
+                self.cycle = 8
+            
+            case 0x78:
+                self.LD("A", "B")
+                self.cycle = 4
+            
+            case 0x79:
+                self.LD("A", "C")
+                self.cycle = 4
+            
+            case 0x7A:
+                self.LD("A", "D")
+                self.cycle = 4
+            
+            case 0x7B:
+                self.LD("A", "E")
+                self.cycle = 4
+            
+            case 0x7C:
+                self.LD("A", "H")
+                self.cycle = 4
+            
+            case 0x7D:
+                self.LD("A", "L")
+                self.cycle = 4
+            
+            case 0x7E:
+                self.LD("A", self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0x7F:
+                self.LD("A", "A")
+                self.cycle = 4
+
+            case 0x80:
+                self.ADD("A", "B")
+                self.cycle = 4
+            
+            case 0x81:
+                self.ADD("A", "C")
+                self.cycle = 4
+            
+            case 0x82:
+                self.ADD("A", "D")
+                self.cycle = 4
+            
+            case 0x83:
+                self.ADD("A", "E")
+                self.cycle = 4
+            
+            case 0x84:
+                self.ADD("A", "H")
+                self.cycle = 4
+            
+            case 0x85:
+                self.ADD("A", "L")
+                self.cycle = 4
+            
+            case 0x86:
+                self.ADD("A", self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0x87:
+                self.ADD("A", "A")
+                self.cycle = 4
+            
+            case 0x88:
+                self.ADC("A", "B")
+                self.cycle = 4
+            
+            case 0x89:
+                self.ADC("A", "C")
+                self.cycle = 4
+            
+            case 0x8A:
+                self.ADC("A", "D")
+                self.cycle = 4
+            
+            case 0x8B:
+                self.ADC("A", "E")
+                self.cycle = 4
+            
+            case 0x8C:
+                self.ADC("A", "H")
+                self.cycle = 4
+            
+            case 0x8D:
+                self.ADC("A", "L")
+                self.cycle = 4
+            
+            case 0x8E:
+                self.ADC("A", self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0x8F:
+                self.ADC("A", "A")
+                self.cycle = 4
+            
+            case 0x90:
+                self.SUB("B")
+                self.cycle = 4
+            
+            case 0x91:
+                self.SUB("C")
+                self.cycle = 4
+            
+            case 0x92:
+                self.SUB("D")
+                self.cycle = 4
+            
+            case 0x93:
+                self.SUB("E")
+                self.cycle = 4
+            
+            case 0x94:
+                self.SUB("H")
+                self.cycle = 4
+            
+            case 0x95:
+                self.SUB("L")
+                self.cycle = 4
+            
+            case 0x96:
+                self.SUB(self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0x97:
+                self.SUB("A")
+                self.cycle = 4
+            
+            case 0x98:
+                self.SBC("A", "B")
+                self.cycle = 4
+            
+            case 0x99:
+                self.SBC("A", "C")
+                self.cycle = 4
+            
+            case 0x9A:
+                self.SBC("A", "D")
+                self.cycle = 4
+            
+            case 0x9B:
+                self.SBC("A", "E")
+                self.cycle = 4
+            
+            case 0x9C:
+                self.SBC("A", "H")
+                self.cycle = 4
+            
+            case 0x9D:
+                self.SBC("A", "L")
+                self.cycle = 4
+            
+            case 0x9E:
+                self.SBC("A", self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0x9F:
+                self.SBC("A", "A")
+                self.cycle = 4
+            
+            case 0xA0:
+                self.AND("B")
+                self.cycle = 4
+            
+            case 0xA1:
+                self.AND("C")
+                self.cycle = 4
+            
+            case 0xA2:
+                self.AND("D")
+                self.cycle = 4
+            
+            case 0xA3:
+                self.AND("E")
+                self.cycle = 4
+            
+            case 0xA4:
+                self.AND("H")
+                self.cycle = 4
+            
+            case 0xA5:
+                self.AND("L")
+                self.cycle = 4
+            
+            case 0xA6:
+                self.AND(self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0xA7:
+                self.AND("A")
+                self.cycle = 4
+            
+            case 0xA8:
+                self.XOR("B")
+                self.cycle = 4
+            
+            case 0xA9:
+                self.XOR("C")
+                self.cycle = 4
+            
+            case 0xAA:
+                self.XOR("D")
+                self.cycle = 4
+            
+            case 0xAB:
+                self.XOR("E")
+                self.cycle = 4
+            
+            case 0xAC:
+                self.XOR("H")
+                self.cycle = 4
+            
+            case 0xAD:
+                self.XOR("L")
+                self.cycle = 4
+            
+            case 0xAE:
+                self.XOR(self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0xAF:
+                self.XOR("A")
+                self.cycle = 4
+            
+            case 0xB0:
+                self.OR("B")
+                self.cycle = 4
+            
+            case 0xB1:
+                self.OR("C")
+                self.cycle = 4
+            
+            case 0xB2:
+                self.OR("D")
+                self.cycle = 4
+            
+            case 0xB3:
+                self.OR("E")
+                self.cycle = 4
+            
+            case 0xB4:
+                self.OR("H")
+                self.cycle = 4
+            
+            case 0xB5:
+                self.OR("L")
+                self.cycle = 4
+            
+            case 0xB6:
+                self.OR(self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0xB7:
+                self.OR("A")
+                self.cycle = 4
+            
+            case 0xB8:
+                self.CP("B")
+                self.cycle = 4
+            
+            case 0xB9:
+                self.CP("C")
+                self.cycle = 4
+            
+            case 0xBA:
+                self.CP("D")
+                self.cycle = 4
+            
+            case 0xBB:
+                self.CP("E")
+                self.cycle = 4
+            
+            case 0xBC:
+                self.CP("H")
+                self.cycle = 4
+            
+            case 0xBD:
+                self.CP("L")
+                self.cycle = 4
+            
+            case 0xBE:
+                self.CP(self.bus.read(self.getreg("HL")))
+                self.cycle = 8
+            
+            case 0xBF:
+                self.CP("A")
                 self.cycle = 4
