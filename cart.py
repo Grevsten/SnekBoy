@@ -1,7 +1,6 @@
 import sys
 import struct
-
-ROM = open('ROMS/example.gb', "rb")
+from array import array
 
 Licensee_Codes = {
 	    0x00 : "None",
@@ -70,12 +69,21 @@ Licensee_Codes = {
 
 class Cartridge():
 
-	def __init__(self, data = ROM.read()):
-		self.data = data
-		self.size = len(data) #bytes
+	def __init__(self, ROM):
+		self.data = array("B", ROM.read())
+		self.size = len(self.data) #bytes
 		self.header = 0x0100
+	
+	def displaydata(self, ran = None):
+		"Display cartridge data for debugging."
+		if ran is None:
+			ran = [0, len(self.data)]
+		datahex = []
+		for i in range(ran[0], ran[1]):
+			datahex.append(format(self.data[i], 'X'))
+		print(datahex)
 
-	def get_Metadata(self): #To be implemented
+	def getmetadata(self): #To be implemented
 		"Returns the metadata of the ROM."
-		return self.data[0x014B:0x014C].hex()
+		pass
 		
